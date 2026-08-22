@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="signupstyle.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+   <video autoplay muted loop playsinline class="back-video" id="myvideo">
+    <source src="backgroundvid.mp4" type="video/mp4">
+    Your browser does not support HTML5 video.
+  </video>
+
+  <a href="login.html" class="link">Login</a>
+
+
+    <div class="out" id="signup-view">
+    <form id="inner_box">
+        <h2>SignUP</h2>
+        <label class="input-container">
+           <span class="i">Username</span>
+           <input type="text" class="item" id="username" required>
+        </label>
+        <label class="input-container">
+           <span class="i">Email</span>
+           <input type="text" class="item" id="email" required>
+        </label>
+        <label class="input-container">
+           <span class="i">Password</span>
+           <input type="password" class="item" id="password" required>
+       </label>
+        <label class="input-container">
+           <span class="i">Confirm Password</span>
+           <input type="password" class="item" id="confirmPassword" required>
+        </label>
+           <input type="submit" class="submit" value="Submit">
+    </label>
+    </form>
+    </div>
+
+    <div class="out-plain" id="otp-view" style="display: none;">
+      <form id="otp_box">
+        <h2>Verify Email</h2>
+        <p id="otp-msg" style="color:white; font-size:13px; text-align:center;"></p>
+        <label class="input-container">
+           <span class="i">Enter OTP</span>
+           <input type="text" class="item" id="otpInput" required>
+        </label>
+        <input type="submit" class="submit" value="Verify">
+      </form>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

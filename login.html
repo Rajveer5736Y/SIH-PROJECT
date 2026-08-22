@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="signupstyle.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+   <video autoplay muted loop playsinline class="back-video" id="myvideo">
+    <source src="backgroundvid.mp4" type="video/mp4">
+    Your browser does not support HTML5 video.
+  </video>
+
+  <a href="signup.html" class="link">Sign Up</a>
+
+
+    <div class="out">
+        
+    <form id="inner_box">
+        <h2>LOGIN</h2>
+        <label class="input-container">
+           <span class="i">Username</span>
+           <input type="text" class="item" id="username" required>
+        </label>
+        <label class="input-container">
+           <span class="i">Password</span>
+           <input type="password" class="item" id="password" required>
+       </label>
+           <input type="submit" class="submit" value="Submit">
+    </label>
+    </form>
+    </div>
+    <script>document.getElementById("myvideo").playbackRate = 0.5;</script>
+</body>
+</html>
