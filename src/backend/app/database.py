@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_URL = os.getenv("DATABSE_URL")
+DB_URL = os.getenv("DATABASE_URL")
 
 if not DB_URL:
     raise RuntimeError("DB url is missing")

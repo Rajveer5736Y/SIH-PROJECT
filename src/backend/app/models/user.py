@@ -1,7 +1,7 @@
 from enum import unique
 import string
-from sqlalchemy import Column,Integer,String,Datetime
-from sqlalcheml.sql import func
+from sqlalchemy import Column,Integer,String,DateTime
+from sqlalchemy.sql import func
 
 from app.database import Base
 
@@ -20,7 +20,7 @@ class User(Base):
         )
 
     email = Column(
-        string(255),
+        String(255),
         nullable=False,
         index=True,
         unique=True
@@ -29,7 +29,7 @@ class User(Base):
     password_hash = Column(String(255),nullable=False)
 
     created_at = Column(
-        Datetime=Datetime,
+        DateTime,
         server_default=func.now(),
         nullable=False
         )
