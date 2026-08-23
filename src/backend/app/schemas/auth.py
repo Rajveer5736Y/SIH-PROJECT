@@ -14,7 +14,6 @@ class SignupRequest(BaseModel):
         max_length=128
     )
 
-
 class SignupResponse(BaseModel):
     id: int
     name: str
@@ -23,3 +22,18 @@ class SignupResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class LoginResponse(BaseModel):
+    id:int
+    name:str
+    email:EmailStr
+
+class LoginRequest(BaseModel):
+    name:str = Field(
+        min_length=3,
+        max_length=80
+    )
+    password:str = Field(
+        min_length=8,
+        max_lenght=128
+    )
