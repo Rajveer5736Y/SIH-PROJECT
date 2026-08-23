@@ -1,11 +1,12 @@
 from pydantic import BaseModel, Field, EmailStr
+from typing import Literal
 
 
 class SignupRequest(BaseModel):
     name: str = Field(min_length=3, max_length=80)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    role:str = Field(min_length=12,max_length=122)
+    role: Literal["trainee", "trainer"]
 
 
 class SignupResponse(BaseModel):
@@ -15,8 +16,7 @@ class SignupResponse(BaseModel):
 
 class OTPVerifyRequest(BaseModel):
     email: EmailStr
-    otp:str
-    is_trainer:bool
+    otp: str
 
 
 class UserResponse(BaseModel):
@@ -24,7 +24,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     is_verified: bool
-    is_trainer:bool
+    role: str
 
     model_config = {
         "from_attributes": True
@@ -40,6 +40,8 @@ class LoginResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+    role: str
+
 
 class PDFUploadResponse(BaseModel):
     id: int
@@ -50,5 +52,3 @@ class PDFUploadResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-    
