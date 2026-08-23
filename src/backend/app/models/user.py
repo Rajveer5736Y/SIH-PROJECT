@@ -1,6 +1,6 @@
 from enum import unique
 import string
-from sqlalchemy import Column,Integer,String,DateTime
+from sqlalchemy import Column,Integer,String,Boolean,DateTime
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -27,6 +27,8 @@ class User(Base):
         )
 
     password_hash = Column(String(255),nullable=False)
+
+    is_verified = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(
         DateTime,

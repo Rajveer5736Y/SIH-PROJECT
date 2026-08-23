@@ -60,7 +60,7 @@ body {
   background: linear-gradient(45deg, #0422ff, #f5f1e8);
 }
 
-#otp_box {
+#otp_form {
   display: flex;
   flex-direction: column;
   gap: 30px;
@@ -106,7 +106,7 @@ h2 {
   font-size: 30px;
 }
 
-#inner_box {
+.inner_box {
   position: relative;
   inset: 3px;
   background: linear-gradient(45deg, #0422ff, #f5f1e8);
