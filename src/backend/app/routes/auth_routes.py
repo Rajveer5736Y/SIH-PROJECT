@@ -6,13 +6,14 @@ import os
 
 from http import HTTPStatus
 from sys import prefix
-from fastapi import APIRouter,Depends,HTTPException,status
+from fastapi import APIRouter,Depends,HTTPException,status,Form,UploadFile,File
 
 from sqlalchemy.orm import session 
 from app.database import get_db
-from app.schemas.auth import LoginResponse, SignupResponse,SignupRequest,LoginRequest, OTPVerifyRequest, UserResponse
+from app.schemas.auth import LoginResponse, SignupResponse,SignupRequest,LoginRequest, OTPVerifyRequest, UserResponse,PDFUploadResponse
 from app.password import pwd_hash, verify_password
-from app.models.user import User
+from app.models.user import Trainee, Trainer
+from app.models.material import StudyMaterial
 from app.models.pending_signup import PendingSignup
 
 router = APIRouter(prefix="/auth",tags=["Authentication"])
@@ -51,7 +52,10 @@ def signup(
     data : SignupRequest,
     db:session = Depends(get_db)
 ):
-    existing_user = (db.query(User).filter(User.email == data.email).first())
+    if not data.is_trainer:
+        existing_user = (db.query(Trainee).filter(Trainee.role == data.role).first())
+    else:
+        existing_user = (db.query(Trainer).filter(Trainer.email == data.email).first())
 
     if existing_user:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail= "email already registered")
@@ -98,26 +102,36 @@ def verify_otp(
 
     if datetime.now(timezone.utc) > pending.otp_expiry.replace(tzinfo=timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="otp expired")
-
-    new_user = User(
-        name=pending.name,
-        email=pending.email,
-        password_hash=pending.password_hash,
-        is_verified=True,
-    )
+    
+    if pending.role == Trainer:
+        new_user = Trainer(
+            name=pending.name,
+            email=pending.email,
+            password_hash=pending.password_hash,
+            is_verified=True,
+        )
+    else:
+        new_user = Trainee(
+            name=pending.name,
+            email=pending.email,
+            password_hash=pending.password_hash,
+            is_verified=True,
+        )
 
     db.add(new_user)
     db.delete(pending)
     db.commit()
     db.refresh(new_user)
 
-    return new_user
+    return new_user 
+
+
 
 
 @router.post("/login",response_model=LoginResponse,status_code=status.HTTP_200_OK)
 def login(data: LoginRequest,db:session = Depends(get_db)):
     
-    existing_user = (db.query(User).filter(User.name == data.name).first())
+    existing_user = (db.query(Trainee).filter(Trainee.name == data.name).first()) or (db.query(Trainer).filter(Trainer.name == data.name).first())
 
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail = "USER DOES NOT EXISTS!")
@@ -130,3 +144,55 @@ def login(data: LoginRequest,db:session = Depends(get_db)):
         )
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="INCORRECT USERNAME OR PASSWORD!")
+    
+
+
+
+@router.post(
+    "/upload",
+    response_model=PDFUploadResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def upload_pdf(
+    teacher_id: int = Form(...),
+    title: str = Form(...),
+    subjects: str = Form(...),
+    file: UploadFile = File(...),
+    db: session = Depends(get_db)
+):
+    teacher = (
+        db.query(Trainer)
+        .filter(Trainer.id == teacher_id)
+        .first()
+    )
+
+    if teacher is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher not found"
+        )
+
+    file_data = file.file.read()
+
+    material = StudyMaterial(
+        teacher_id=teacher_id,
+        title=title,
+        subject=subjects,
+        file_name=file.filename,
+        file_type=file.content_type,
+        file_data=file_data
+    )
+
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+
+    return material
+
+@router.get("/material/{material_id}")
+def get_material(material_id: int, db: session = Depends(get_db)):
+    material = db.query(StudyMaterial).filter(StudyMaterial.id == material_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    return material 
+

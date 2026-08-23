@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.models.user import User
+from app.models.user import Trainee,Trainer
 from app.models.pending_signup import PendingSignup
 from app.routes.auth_routes import router as auth_router
 
