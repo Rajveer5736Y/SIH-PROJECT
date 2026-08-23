@@ -1,37 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
+
 <html lang="en">
-<head>
-    <link rel="stylesheet" href="signupstyle.css">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-   <video autoplay muted loop playsinline class="back-video" id="myvideo">
-    <source src="backgroundvid.mp4" type="video/mp4">
-    Your browser does not support HTML5 video.
-  </video>
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Login | Capacity Connect</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Header / Brand Section -->
+    <header class="site-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg
+            fill="none"
+            viewbox="0 0 48 48"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g clip-path="url(#clip0_6_330)">
+              <path
+                clip-rule="evenodd"
+                d="M24 0.757355L47.2426 24L24 47.2426L0.757355 24L24 0.757355ZM21 35.7574V12.2426L9.24264 24L21 35.7574Z"
+                fill="currentColor"
+                fill-rule="evenodd"
+              ></path>
+            </g>
+            <defs>
+              <clippath id="clip0_6_330">
+                <rect fill="white" height="48" width="48"></rect>
+              </clippath>
+            </defs>
+          </svg>
+        </div>
+        <h2 class="brand-title">Capacity Connect</h2>
+      </div>
+    </header>
 
-  <a href="signup.html" class="link">Sign Up</a>
+    <main class="auth-main">
+      <!-- Auth Card -->
+      <div class="auth-card">
+        <div class="auth-card-inner">
+          <div class="auth-header">
+            <h1 class="auth-title">Welcome Back!</h1>
+            <p class="auth-subtitle">Sign in to continue to Capacity Connect</p>
+          </div>
 
+          <form id="login-form">
+            <!-- Role Selection
+            <div>
+              <span class="role-select-label">Select your role</span>
+              <div class="role-grid">
+                <!Trainee
+                <label class="role-card">
+                  <input checked="" class="sr-only" name="role" type="radio" value="trainee" />
+                  <div class="role-card-content">
+                    <span class="material-symbols-outlined role-icon" data-icon="school">school</span>
+                    <h3 class="role-title">Trainee</h3>
+                    <p class="role-desc">Learn and develop skills</p>
+                  </div>
+                </label>
+                <! Trainer -->
+                <!-- <label class="role-card">
+                  <input class="sr-only" name="role" type="radio" value="trainer" />
+                  <div class="role-card-content">
+                    <span class="material-symbols-outlined role-icon" data-icon="supervisor_account">supervisor_account</span>
+                    <h3 class="role-title">Trainer</h3>
+                    <p class="role-desc">Teach and manage courses</p>
+                  </div>
+                </label> -->
+                <!-- Admin -->
+                <!-- <label class="role-card">
+                <input class="sr-only" name="role" type="radio" value="admin"/>
+                <div class="role-card-content">
+                <span class="material-symbols-outlined role-icon" data-icon="settings">settings</span>
+                <h3 class="role-title">Admin</h3>
+                <p class="role-desc">Manage the platform</p>
+                </div>
+                </label> -->
+              <!-- </div>
+            </div> --> 
 
-    <div class="out">
-        
-    <form id="login_box" class="inner_box">
-        <h2>LOGIN</h2>
-        <label class="input-container">
-           <span class="i">Username</span>
-           <input type="text" class="item" id="username" required>
-        </label>
-        <label class="input-container">
-           <span class="i">Password</span>
-           <input type="password" class="item" id="password" required>
-       </label>
-           <input type="submit" class="submit" value="Submit">
-    </label>
-    </form>
-    </div>
-    <script>document.getElementById("myvideo").playbackRate = 0.5;</script>
-    <script src="script.js"></script>
-</body>
+            <!-- Input Fields -->
+            <div class="field-group">
+              <div class="field">
+                <label class="field-label" for="email">Email Address</label>
+                <div class="input-wrapper">
+                  <div class="input-icon-left">
+                    <span class="material-symbols-outlined" data-icon="mail">mail</span>
+                  </div>
+                  <input
+                    class="text-input"
+                    id="email"
+                    placeholder="name@company.com"
+                    required=""
+                    type="email"
+                  />
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="field-header">
+                  <label class="field-label" for="password">Password</label>
+                  <a class="forgot-link" href="#">Forgot Password?</a>
+                </div>
+                <div class="input-wrapper">
+                  <div class="input-icon-left">
+                    <span class="material-symbols-outlined" data-icon="lock">lock</span>
+                  </div>
+                  <input
+                    class="text-input has-toggle"
+                    id="password"
+                    placeholder="••••••••"
+                    required=""
+                    type="password"
+                  />
+                  <button class="toggle-password" type="button">
+                    <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+              <button class="btn-primary" type="submit">Sign In</button>
+
+              <div class="signup-row">
+                <p class="signup-text">
+                  Don't have an account?
+                  <a class="signup-link" href="signup.html">Sign Up</a>
+                </p>
+
+                <div class="divider">
+                  <div class="divider-line"></div>
+                  <span class="divider-text">or</span>
+                  <div class="divider-line"></div>
+                </div>
+
+                <button class="btn-secondary" type="button">
+                  <span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+                  Continue as Demo
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <p class="footer-text">
+        Capacity Connect is a unified platform for professional skill
+        development and certification management.
+      </p>
+      <div class="footer-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Support</a>
+      </div>
+    </footer>
+
+    <script>
+      // Role selection UI parity
+      const roleInputs = document.querySelectorAll('input[name="role"]');
+      roleInputs.forEach((input) => {
+        input.addEventListener("change", (e) => {
+          if (e.target.checked) {
+            // no-op: styling handled purely via :checked + .role-card-content in CSS
+          }
+        });
+      });
+
+      // Demo form submission
+      document.getElementById("login-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button[type="submit"]');
+        const originalText = btn.innerHTML;
+        btn.innerHTML =
+          '<span class="material-symbols-outlined animate-spin" data-icon="progress_activity">progress_activity</span> Signing in...';
+        btn.disabled = true;
+
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+          alert("Sign in logic would trigger here.");
+        }, 1500);
+      });
+    </script>
+  </body>
 </html>

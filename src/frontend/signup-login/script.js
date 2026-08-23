@@ -1,4 +1,3 @@
-document.getElementById("myvideo").playbackRate = 0.5;
 
 
 const signupForm = document.getElementById("signup_box");
@@ -13,6 +12,7 @@ signupForm.addEventListener("submit", async (e) => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
     const confirmPassword = document.getElementById("confirmPassword").value;
+    const role = document.querySelector('input[name="role"]:checked').value;
 
 
     // Check passwords
@@ -36,7 +36,8 @@ signupForm.addEventListener("submit", async (e) => {
                 body: JSON.stringify({
                     name: username,
                     email: email,
-                    password: password
+                    password: password,
+                    role: role
                 })
             }
         );
@@ -116,6 +117,8 @@ otpForm.addEventListener("submit", async (e) => {
         console.log("Account verified:", data);
 
         alert("Account verified successfully!");
+
+        window.location.href = "login.html";
 
     } catch (error) {
 
