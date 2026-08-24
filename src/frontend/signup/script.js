@@ -15,7 +15,13 @@ signupForm.addEventListener("submit", async (e) => {
     const role = document.querySelector('input[name="role"]:checked').value;
 
 
-    // Check passwords
+    // Check password length
+    if (password.length < 8) {
+        alert("Password must be at least 8 characters long!");
+        return;
+    }
+
+    // Check passwords match
     if (password !== confirmPassword) {
         alert("Passwords do not match!");
         return;
@@ -48,7 +54,11 @@ signupForm.addEventListener("submit", async (e) => {
 
         if (!response.ok) {
 
-            alert(data.detail || "Signup failed");
+            alert(
+                Array.isArray(data.detail)
+                    ? data.detail.map(err => err.msg).join("\n")
+                    : (data.detail || "Signup failed")
+            );
 
             return;
         }
@@ -118,7 +128,7 @@ otpForm.addEventListener("submit", async (e) => {
 
         alert("Account verified successfully!");
 
-        window.location.href = "login.html";
+        window.location.href = "../login/login.html";
 
     } catch (error) {
 
