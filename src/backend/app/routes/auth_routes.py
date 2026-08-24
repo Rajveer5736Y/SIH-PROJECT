@@ -3,7 +3,9 @@ from datetime import datetime, timedelta, timezone
 import smtplib
 from email.mime.text import MIMEText
 import os
+from turtle import title
 
+from fastapi.responses import Response
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
 from sqlalchemy.orm import Session
 
@@ -147,7 +149,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/upload", response_model=PDFUploadResponse, status_code=status.HTTP_201_CREATED)
 def upload_pdf(
     teacher_id: int = Form(...),
-    title: str = Form(...),
+    topic: str = Form(...),
     subjects: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -161,7 +163,7 @@ def upload_pdf(
 
     material = StudyMaterial(
         teacher_id=teacher_id,
-        title=title,
+        topic=topic,
         subject=subjects,
         file_name=file.filename,
         file_type=file.content_type,
@@ -175,9 +177,30 @@ def upload_pdf(
     return material
 
 
-@router.get("/material/{material_id}")
-def get_material(material_id: int, db: Session = Depends(get_db)):
-    material = db.query(StudyMaterial).filter(StudyMaterial.id == material_id).first()
+@router.get("/material/{title}/{subject}")
+def get_material(
+    topic: str,
+    subject: str,
+    db: Session = Depends(get_db)
+):
+    material = (
+        db.query(StudyMaterial)
+        .filter(
+            (StudyMaterial.topic == topic) and
+            (StudyMaterial.subject == subject)
+        )
+        .first()
+    )
+
     if not material:
-        raise HTTPException(status_code=404, detail="Material not found")
-    return material
+        raise HTTPException(
+            status_code=404,
+            detail="Material not found"
+        )
+
+    return Response(
+        content=material.file_data,
+        headers={
+            "Content-Disposition": f'inline; filename="{material.file_name}"'
+        }
+    )
