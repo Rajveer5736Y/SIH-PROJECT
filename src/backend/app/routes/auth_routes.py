@@ -126,15 +126,15 @@ def verify_otp(data: OTPVerifyRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     existing_user = (
-        db.query(Trainee).filter(Trainee.name == data.name).first()
-        or db.query(Trainer).filter(Trainer.name == data.name).first()
+        db.query(Trainee).filter(Trainee.email == data.email).first()
+        or db.query(Trainer).filter(Trainer.email == data.email).first()
     )
 
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user does not exist")
 
     if not verify_password(data.password, existing_user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="incorrect username or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="incorrect email or password")
 
     return LoginResponse(
         id=existing_user.id,

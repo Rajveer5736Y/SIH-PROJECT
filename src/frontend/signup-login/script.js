@@ -131,29 +131,3 @@ otpForm.addEventListener("submit", async (e) => {
     }
 });
 
-const loginForm = document.getElementById("login_box");
-
-if (loginForm) {
-    loginForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const username = document.getElementById("username").value;
-        const password = document.getElementById("password").value;
-
-        try {
-            const response = await fetch("http://localhost:8000/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: username, password: password })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                alert(data.detail || "Login failed");
-                return;
-            }
-            alert("Login successful!");
-            localStorage.setItem("user", JSON.stringify(data));
-        } catch (error) {
-            alert("Cannot connect to server. Make sure FastAPI is running.");
-        }
-    });
-}

@@ -32,7 +32,7 @@ class UserResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    name: str = Field(min_length=3, max_length=80)
+    email: str = Field(min_length=3, max_length=80)
     password: str = Field(min_length=8, max_length=128)
 
 
