@@ -7,7 +7,7 @@ class StudyMaterial(Base):
     id = Column(Integer, primary_key=True)
     teacher_id = Column(Integer, ForeignKey("Trainer.id"), nullable=False)
 
-    title = Column(String(200), nullable=False)
+    topic = Column(String(200), nullable=False)
     subject = Column(String(100), nullable=False)
 
     file_name = Column(String(255), nullable=False)
