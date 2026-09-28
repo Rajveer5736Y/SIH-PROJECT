@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from typing import Optional
 from pydantic import BaseModel
 
 BASE = Path(__file__).parent
@@ -16,6 +17,14 @@ DB = BASE / "dms.db"
 SECRET = os.getenv("SECRET_KEY", "dev-secret-change-me")   # env var in real deployments
 ALLOWED_EXT = {".pdf", ".txt", ".md", ".docx", ".png", ".jpg"}
 MAX_BYTES = 10 * 1024 * 1024
+DEPARTMENTS = ["Police", "Forensics", "Legal", "Prosecution", "Audit"]
+CASE_STATUSES = ["OPEN", "CLOSED", "ARCHIVED"]          # anything but OPEN makes the case read-only
+# per-user, per-case overrides set by an admin:
+#   GRANT     -> user gets access even if their department is not assigned to the case
+#   READ_ONLY -> user keeps access but is limited to view / verify / audit
+#   DENY      -> user is blocked from the case even if their department is assigned
+ACCESS_LEVELS = ["GRANT", "READ_ONLY", "DENY"]
+READ_ONLY_PERMS = {"view", "verify", "audit"}
 
 # ---- RBAC: role -> permissions + document types it may upload (None = any) ----
 ROLES = {
@@ -24,7 +33,7 @@ ROLES = {
     "forensic_officer": {"perms": {"view", "upload", "verify"}, "types": ["Forensic Report", "Evidence Report"]},
     "legal_officer":    {"perms": {"view", "upload"}, "types": ["Legal Notice", "Court Filing"]},
     "auditor":          {"perms": {"view", "audit", "verify"}, "types": []},
-    "admin":            {"perms": {"view", "upload", "manage", "verify", "audit"}, "types": None},  # global oversight
+    "admin":            {"perms": {"view", "upload", "manage", "verify", "audit", "admin"}, "types": None},  # global oversight + case administration
 }
 
 # ---------------------------------------------------------------- database
@@ -48,6 +57,7 @@ def init_db():
         "CREATE TABLE IF NOT EXISTS cases(id INTEGER PRIMARY KEY, case_number UNIQUE, title, description, status DEFAULT 'OPEN', created_by, created_at)",
         "CREATE TABLE IF NOT EXISTS case_depts(case_id, department)",
         "CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY, case_id, name, doc_type, version, sha256, path, uploader_id, department, created_at)",
+        "CREATE TABLE IF NOT EXISTS case_access(case_id, user_id, access, set_by, set_at, PRIMARY KEY(case_id, user_id))",
         "CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, user_id, action, case_id, doc_id, detail, ts, prev_hash, hash)",
     ]: q(stmt)
     if not q("SELECT 1 FROM users LIMIT 1"):
@@ -90,15 +100,42 @@ def current_user(cred: HTTPAuthorizationCredentials = Depends(bearer)):
     if not u: raise HTTPException(401, "Unknown user")
     return u
 
+def compute_perms(user, case, override=None):
+    """Effective permissions of `user` on `case` (None = no access at all).
+    Combines: role -> department assignment -> admin per-user override -> case status."""
+    perms = set(ROLES[user["role"]]["perms"])
+    if user["role"] != "admin":
+        if override == "DENY":
+            return None
+        if user["department"] not in case["departments"] and override not in ("GRANT", "READ_ONLY"):
+            return None
+        if override == "READ_ONLY":
+            perms &= READ_ONLY_PERMS
+    if case["status"] != "OPEN":
+        perms -= {"upload", "manage"}                # closed / archived cases are frozen
+    return perms
+
+def user_override(uid, cid):
+    r = q("SELECT access FROM case_access WHERE case_id=? AND user_id=?", (cid, uid), one=True)
+    return r["access"] if r else None
+
 def get_case(user, cid, perm):
-    """Role check AND case-level check (department must be assigned to the case)."""
+    """Role check AND case-level check (department assigned / admin override / case status)."""
     c = q("SELECT * FROM cases WHERE id=?", (cid,), one=True)
     if not c: raise HTTPException(404, "Case not found")
     c["departments"] = [r["department"] for r in q("SELECT department FROM case_depts WHERE case_id=?", (cid,))]
-    if user["role"] != "admin" and user["department"] not in c["departments"]:
-        raise HTTPException(403, "Your department is not assigned to this case")
-    if perm not in ROLES[user["role"]]["perms"]:
+    ov = user_override(user["id"], cid)
+    perms = compute_perms(user, c, ov)
+    if perms is None:
+        raise HTTPException(403, "Your access to this case has been revoked by an administrator" if ov == "DENY"
+                            else "Your department is not assigned to this case")
+    if perm not in perms:
+        if perm in ROLES[user["role"]]["perms"]:
+            why = (f"Case is {c['status']} (read-only)" if c["status"] != "OPEN" and perm in ("upload", "manage")
+                   else "An administrator limited you to read-only access on this case")
+            raise HTTPException(403, why)
         raise HTTPException(403, f"Role '{user['role']}' does not have '{perm}' permission")
+    c["my_perms"] = sorted(perms)
     return c
 
 def get_doc(user, did, perm):
@@ -176,10 +213,94 @@ def list_cases(user=Depends(current_user)):
     if user["role"] == "admin":
         rows = q("SELECT * FROM cases ORDER BY id DESC")
     else:
-        rows = q("SELECT c.* FROM cases c JOIN case_depts d ON d.case_id=c.id WHERE d.department=? ORDER BY c.id DESC", (user["department"],))
+        rows = q("""SELECT c.* FROM cases c
+                    WHERE c.id NOT IN (SELECT case_id FROM case_access WHERE user_id=? AND access='DENY')
+                      AND (c.id IN (SELECT case_id FROM case_depts WHERE department=?)
+                           OR c.id IN (SELECT case_id FROM case_access WHERE user_id=? AND access IN ('GRANT','READ_ONLY')))
+                    ORDER BY c.id DESC""", (user["id"], user["department"], user["id"]))
     for c in rows:
         c["departments"] = [r["department"] for r in q("SELECT department FROM case_depts WHERE case_id=?", (c["id"],))]
     return rows
+
+@app.get("/api/v1/cases/{cid}")
+def case_detail(cid: int, user=Depends(current_user)):
+    return get_case(user, cid, "view")          # includes my_perms for this specific case
+
+# ---------------------------------------------------------------- admin: case settings + access
+class SettingsIn(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+
+class DeptsIn(BaseModel):
+    departments: list[str]
+
+class AccessIn(BaseModel):
+    user_id: int
+    access: str        # DEFAULT (remove override) | GRANT | READ_ONLY | DENY
+
+@app.get("/api/v1/cases/{cid}/admin")
+def case_admin(cid: int, user=Depends(current_user)):
+    c = get_case(user, cid, "admin")
+    overrides = {r["user_id"]: r["access"] for r in q("SELECT * FROM case_access WHERE case_id=?", (cid,))}
+    users = []
+    for u in q("SELECT * FROM users WHERE role != 'admin' ORDER BY department, name"):
+        ov = overrides.get(u["id"])
+        perms = compute_perms(u, c, ov)
+        users.append({"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"], "department": u["department"],
+                      "dept_assigned": u["department"] in c["departments"], "override": ov,
+                      "effective": "NO ACCESS" if perms is None else ("READ-ONLY" if "upload" not in perms else "FULL (per role)")})
+    return {"case": {k: c[k] for k in ("id", "case_number", "title", "description", "status", "departments")},
+            "statuses": CASE_STATUSES, "all_departments": DEPARTMENTS, "users": users}
+
+@app.patch("/api/v1/cases/{cid}/settings")
+def update_case_settings(cid: int, body: SettingsIn, user=Depends(current_user)):
+    c = get_case(user, cid, "admin")
+    changes = {}
+    if body.status is not None:
+        if body.status not in CASE_STATUSES: raise HTTPException(400, f"Status must be one of {', '.join(CASE_STATUSES)}")
+        changes["status"] = body.status
+    if body.title is not None:
+        if not body.title.strip(): raise HTTPException(400, "Title cannot be empty")
+        changes["title"] = body.title.strip()
+    if body.description is not None: changes["description"] = body.description
+    changes = {k: v for k, v in changes.items() if v != c[k]}
+    if not changes: return {"ok": True, "changed": []}
+    for k, v in changes.items():                       # keys are from a fixed whitelist above
+        q(f"UPDATE cases SET {k}=? WHERE id=?", (v, cid))
+    audit(user, "ADMIN_UPDATE_CASE", cid, detail="; ".join(f"{k}: {c[k]!r} -> {v!r}" for k, v in changes.items())[:500])
+    return {"ok": True, "changed": list(changes)}
+
+@app.put("/api/v1/cases/{cid}/departments")
+def set_case_departments(cid: int, body: DeptsIn, user=Depends(current_user)):
+    c = get_case(user, cid, "admin")
+    new = set(body.departments)
+    if not new: raise HTTPException(400, "Assign at least one department")
+    bad = new - set(DEPARTMENTS)
+    if bad: raise HTTPException(400, f"Unknown department(s): {', '.join(sorted(bad))}")
+    old = set(c["departments"])
+    if new == old: return {"ok": True}
+    q("DELETE FROM case_depts WHERE case_id=?", (cid,))
+    for d in new: q("INSERT INTO case_depts VALUES(?,?)", (cid, d))
+    audit(user, "ADMIN_SET_DEPARTMENTS", cid, detail=f"added: {', '.join(sorted(new - old)) or '-'}; removed: {', '.join(sorted(old - new)) or '-'}")
+    return {"ok": True}
+
+@app.put("/api/v1/cases/{cid}/access")
+def set_user_access(cid: int, body: AccessIn, user=Depends(current_user)):
+    get_case(user, cid, "admin")
+    target = q("SELECT * FROM users WHERE id=?", (body.user_id,), one=True)
+    if not target: raise HTTPException(404, "User not found")
+    if target["role"] == "admin": raise HTTPException(400, "Admin access cannot be restricted")
+    if body.access != "DEFAULT" and body.access not in ACCESS_LEVELS:
+        raise HTTPException(400, f"Access must be DEFAULT or one of {', '.join(ACCESS_LEVELS)}")
+    before = user_override(target["id"], cid) or "DEFAULT"
+    if before == body.access: return {"ok": True}
+    q("DELETE FROM case_access WHERE case_id=? AND user_id=?", (cid, target["id"]))
+    if body.access != "DEFAULT":
+        q("INSERT INTO case_access VALUES(?,?,?,?,?)",
+          (cid, target["id"], body.access, user["id"], datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    audit(user, "ADMIN_SET_USER_ACCESS", cid, detail=f"{target['name']} ({target['email']}): {before} -> {body.access}")
+    return {"ok": True}
 
 async def save_version(user, cid, name, doc_type, file):
     if Path(file.filename).suffix.lower() not in ALLOWED_EXT:

@@ -65,7 +65,7 @@
 const API = '/api/v1';
 const DEPTS = ['Police', 'Forensics', 'Legal', 'Prosecution', 'Audit'];
 const TYPES = ['FIR','Investigation Report','Witness Statement','Charge Sheet','Forensic Report','Evidence Report','Legal Notice','Court Filing'];
-let token = localStorage.getItem('token'), me = JSON.parse(localStorage.getItem('me') || 'null'), cur = null;
+let token = localStorage.getItem('token'), me = JSON.parse(localStorage.getItem('me') || 'null'), cur = null, curCase = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const can = p => me.perms.includes(p);
@@ -105,7 +105,7 @@ const start = guard(async () => {
 const loadCases = guard(async () => {
   const cs = await (await api('/cases')).json();
   $('cases').innerHTML = cs.map(c => `<div onclick="openCase(${c.id})" class="border rounded p-2 cursor-pointer hover:bg-indigo-50">
-    <div class="font-medium">${esc(c.case_number)}</div><div class="text-slate-500">${esc(c.title)}</div>
+    <div class="font-medium">${esc(c.case_number)} ${c.status !== 'OPEN' ? `<span class="text-[10px] bg-slate-200 text-slate-600 rounded px-1">${esc(c.status)}</span>` : ''}</div><div class="text-slate-500">${esc(c.title)}</div>
     <div class="text-xs text-slate-400">${c.departments.map(esc).join(' · ')}</div></div>`).join('') || '<i class="text-slate-400">No cases visible to your department.</i>';
 });
 const createCase = guard(async () => {
@@ -115,21 +115,25 @@ const createCase = guard(async () => {
 });
 
 const openCase = guard(async id => {
-  cur = id; const docs = await (await api(`/cases/${id}/documents`)).json();
+  cur = id; curCase = await (await api(`/cases/${id}`)).json();
+  const cp = p => curCase.my_perms.includes(p);
+  const docs = await (await api(`/cases/${id}/documents`)).json();
   const opts = (me.types ?? TYPES).map(t => `<option>${t}</option>`).join('');
   $('caseView').className = 'bg-white rounded-lg shadow p-4';
   $('caseView').innerHTML = `
     <div class="flex flex-wrap gap-2 items-center mb-3">
-      <h2 class="font-semibold text-lg mr-auto">Case documents</h2>
+      <h2 class="font-semibold text-lg mr-auto">${esc(curCase.case_number)} — ${esc(curCase.title)}
+        ${curCase.status !== 'OPEN' ? `<span class="text-xs bg-slate-200 text-slate-600 rounded px-2 py-0.5 align-middle">${esc(curCase.status)}</span>` : ''}</h2>
+      ${can('admin') ? `<button onclick="showAdmin()" class="px-3 py-1 bg-indigo-600 text-white rounded text-sm">⚙ Admin settings</button>` : ''}
       <button onclick="showAudit()" class="px-3 py-1 bg-slate-100 rounded text-sm">🧾 Audit trail</button>
       <button onclick="showSummary()" class="px-3 py-1 bg-slate-100 rounded text-sm">✨ AI summary</button>
     </div>
-    ${can('upload') && opts ? `<div class="flex flex-wrap gap-2 mb-3 p-3 bg-slate-50 rounded text-sm">
+    ${cp('upload') && opts ? `<div class="flex flex-wrap gap-2 mb-3 p-3 bg-slate-50 rounded text-sm">
       <select id="dtype" class="border rounded px-2 py-1">${opts}</select>
       <input id="dfile" type="file" class="text-xs flex-1">
       <button onclick="upload()" class="bg-indigo-600 text-white px-3 rounded">Upload</button>
       <span class="w-full text-xs text-slate-400">Uploading a file with an existing name creates a new version.</span></div>`
-      : `<p class="text-xs text-amber-600 mb-3">Your role has view-only access to this case (no upload).</p>`}
+      : `<p class="text-xs text-amber-600 mb-3">${curCase.status !== 'OPEN' ? `This case is ${esc(curCase.status)} — documents are read-only.` : 'You have view-only access to this case (no upload).'}</p>`}
     <div class="space-y-2">${docs.map(d => `
       <div class="border rounded p-3">
         <div class="flex flex-wrap justify-between gap-2">
@@ -141,9 +145,9 @@ const openCase = guard(async id => {
         <div class="flex flex-wrap gap-2 text-xs">
           <button onclick="download(${d.id})" class="underline">Download</button>
           <button onclick="showVersions(${d.id})" class="underline">Versions (${d.versions})</button>
-          ${can('upload') ? `<button onclick="pickUpdate(${d.id})" class="underline text-indigo-600">Update file (new version)</button>` : ''}
-          ${can('verify') ? `<button onclick="verify(${d.id})" class="underline">Verify integrity</button>` : ''}
-          ${can('manage') ? `<button onclick="tamper(${d.id})" class="underline text-red-500">Simulate tamper (demo)</button>` : ''}
+          ${cp('upload') ? `<button onclick="pickUpdate(${d.id})" class="underline text-indigo-600">Update file (new version)</button>` : ''}
+          ${cp('verify') ? `<button onclick="verify(${d.id})" class="underline">Verify integrity</button>` : ''}
+          ${cp('manage') ? `<button onclick="tamper(${d.id})" class="underline text-red-500">Simulate tamper (demo)</button>` : ''}
         </div></div>`).join('') || '<i class="text-slate-400 text-sm">No documents yet.</i>'}</div>`;
 });
 
@@ -173,6 +177,55 @@ const verify = guard(async id => {
   if (!ok) toast(`Hash mismatch! Now: ${r.current_hash.slice(0, 16)}…`);
 });
 const tamper = guard(async id => { await api(`/documents/${id}/tamper`, { method: 'POST' }); toast('Stored file altered — now run Verify', true); });
+
+const showAdmin = guard(async () => {
+  const a = await (await api(`/cases/${cur}/admin`)).json(), c = a.case;
+  const accLabel = { '': 'Default (by department)', GRANT: 'Grant access', READ_ONLY: 'Read-only', DENY: 'Deny access' };
+  const effColor = e => e === 'NO ACCESS' ? 'bg-red-100 text-red-700' : e === 'READ-ONLY' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
+  panel(`<h3 class="font-semibold text-base mb-3">⚙ Admin — ${esc(c.case_number)}</h3>
+    <div class="border rounded p-3 mb-3">
+      <div class="font-medium mb-2">Case settings</div>
+      <input id="adm_title" class="w-full border rounded px-2 py-1 mb-1" value="${esc(c.title)}">
+      <textarea id="adm_desc" rows="2" class="w-full border rounded px-2 py-1 mb-1" placeholder="Description">${esc(c.description)}</textarea>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-500">Status</label>
+        <select id="adm_status" class="border rounded px-2 py-1">${a.statuses.map(s => `<option ${s === c.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <button onclick="saveSettings()" class="ml-auto bg-indigo-600 text-white px-3 py-1 rounded">Save settings</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-1">Closed / archived cases are read-only: no uploads or new versions until reopened.</p>
+    </div>
+    <div class="border rounded p-3 mb-3">
+      <div class="font-medium mb-2">Departments with access</div>
+      <div class="flex flex-wrap gap-3 mb-2">${a.all_departments.map(d => `<label><input type="checkbox" class="adm_dept" value="${d}" ${c.departments.includes(d) ? 'checked' : ''}> ${d}</label>`).join('')}</div>
+      <button onclick="saveDepts()" class="bg-indigo-600 text-white px-3 py-1 rounded">Save departments</button>
+    </div>
+    <div class="border rounded p-3">
+      <div class="font-medium mb-2">User access for this case</div>
+      <div class="overflow-x-auto"><table class="w-full text-left text-xs">
+        <thead><tr class="text-slate-500"><th class="py-1">User</th><th>Dept</th><th>Effective</th><th>Override</th></tr></thead>
+        <tbody>${a.users.map(u => `<tr class="border-t">
+          <td class="py-1"><b>${esc(u.name)}</b><div class="text-slate-400">${esc(u.role.replace('_', ' '))}</div></td>
+          <td>${esc(u.department)} ${u.dept_assigned ? '' : '<span class="text-slate-400">(not assigned)</span>'}</td>
+          <td><span class="px-2 py-0.5 rounded ${effColor(u.effective)}">${u.effective}</span></td>
+          <td><select class="border rounded px-1 py-0.5" onchange="setAccess(${u.id}, this.value)">
+            ${Object.entries(accLabel).map(([k, v]) => `<option value="${k || 'DEFAULT'}" ${(u.override || '') === k ? 'selected' : ''}>${v}</option>`).join('')}
+          </select></td></tr>`).join('')}</tbody></table></div>
+      <p class="text-xs text-slate-400 mt-2">Every change here is written to the case audit trail. Admins themselves cannot be restricted.</p>
+    </div>`);
+});
+const saveSettings = guard(async () => {
+  await api(`/cases/${cur}/settings`, { method: 'PATCH', json: { title: $('adm_title').value, description: $('adm_desc').value, status: $('adm_status').value } });
+  toast('Case settings saved', true); loadCases(); await openCase(cur); showAdmin();
+});
+const saveDepts = guard(async () => {
+  const departments = [...document.querySelectorAll('.adm_dept:checked')].map(i => i.value);
+  await api(`/cases/${cur}/departments`, { method: 'PUT', json: { departments } });
+  toast('Departments updated', true); loadCases(); showAdmin();
+});
+const setAccess = guard(async (user_id, access) => {
+  await api(`/cases/${cur}/access`, { method: 'PUT', json: { user_id, access } });
+  toast('Access updated', true); showAdmin();
+});
 
 function panel(html) { const p = $('panel'); p.classList.remove('hidden'); p.innerHTML = html; p.scrollIntoView({ behavior: 'smooth' }); }
 const showVersions = guard(async id => {
