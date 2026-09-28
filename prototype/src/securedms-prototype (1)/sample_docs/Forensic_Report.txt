@@ -1,0 +1,1 @@
+Digital Forensic Report. Analysis of the seized laptop found a spreadsheet listing suspicious transactions and mule account numbers. Browser history shows repeated access to the banking portal from the accused's device. Disk image hash was recorded at seizure.

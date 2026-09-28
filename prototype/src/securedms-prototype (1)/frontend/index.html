@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDMS</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+<div id="toast" class="fixed top-4 right-4 z-50 hidden px-4 py-2 rounded shadow text-white text-sm max-w-sm"></div>
+
+<!-- LOGIN -->
+<section id="login" class="min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow p-8 w-full max-w-md">
+    <h1 class="text-2xl font-bold text-indigo-700">🔐 SecureDMS</h1>
+    <p class="text-sm text-slate-500 mb-5">Secure Digital Legal &amp; Investigation Document Management</p>
+    <input id="email" class="w-full border rounded px-3 py-2 mb-2" placeholder="Email">
+    <input id="password" type="password" class="w-full border rounded px-3 py-2 mb-3" placeholder="Password" value="demo123">
+    <button onclick="doLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded py-2">Sign in</button>
+    <p class="text-xs text-slate-400 mt-4 mb-1">Demo users (password: demo123) — click to fill:</p>
+    <div class="flex flex-wrap gap-1 text-xs">
+      <button class="px-2 py-1 bg-slate-100 rounded" onclick="fill('officer@police.gov')">Police Officer</button>
+      <button class="px-2 py-1 bg-slate-100 rounded" onclick="fill('forensic@lab.gov')">Forensics</button>
+      <button class="px-2 py-1 bg-slate-100 rounded" onclick="fill('legal@legal.gov')">Legal</button>
+      <button class="px-2 py-1 bg-slate-100 rounded" onclick="fill('auditor@audit.gov')">Auditor</button>
+      <button class="px-2 py-1 bg-slate-100 rounded" onclick="fill('admin@it.gov')">Admin</button>
+    </div>
+  </div>
+</section>
+
+<!-- APP -->
+<section id="app" class="hidden">
+  <header class="bg-indigo-700 text-white px-6 py-3 flex items-center justify-between">
+    <b>🔐 SecureDMS</b>
+    <div class="text-sm"><span id="who"></span> <button onclick="logout()" class="ml-3 underline">Logout</button></div>
+  </header>
+  <div class="max-w-6xl mx-auto p-4 grid md:grid-cols-3 gap-4">
+    <aside class="space-y-4">
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="flex gap-2">
+          <input id="q" class="flex-1 border rounded px-2 py-1 text-sm" placeholder="Search documents…" onkeydown="if(event.key==='Enter')doSearch()">
+          <button onclick="doSearch()" class="bg-indigo-600 text-white px-3 rounded text-sm">Go</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="font-semibold mb-2">Cases</h2>
+        <div id="cases" class="space-y-2 text-sm"></div>
+      </div>
+      <div id="newCase" class="bg-white rounded-lg shadow p-4 hidden">
+        <h2 class="font-semibold mb-2">New case</h2>
+        <input id="cn" class="w-full border rounded px-2 py-1 text-sm mb-1" value="CASE-2026-00124">
+        <input id="ct" class="w-full border rounded px-2 py-1 text-sm mb-1" placeholder="Title" value="Online banking fraud">
+        <div class="text-xs my-2 grid grid-cols-2 gap-1" id="deptBoxes"></div>
+        <button onclick="createCase()" class="w-full bg-indigo-600 text-white rounded py-1 text-sm">Create &amp; assign departments</button>
+      </div>
+    </aside>
+
+    <main class="md:col-span-2 space-y-4">
+      <div id="caseView" class="bg-white rounded-lg shadow p-4 text-slate-500 text-sm">Select a case to begin.</div>
+      <div id="panel" class="hidden bg-white rounded-lg shadow p-4 text-sm"></div>
+    </main>
+  </div>
+</section>
+
+<script>
+const API = '/api/v1';
+const DEPTS = ['Police', 'Forensics', 'Legal', 'Prosecution', 'Audit'];
+const TYPES = ['FIR','Investigation Report','Witness Statement','Charge Sheet','Forensic Report','Evidence Report','Legal Notice','Court Filing'];
+let token = localStorage.getItem('token'), me = JSON.parse(localStorage.getItem('me') || 'null'), cur = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const can = p => me.perms.includes(p);
+
+function toast(msg, ok = false) {
+  const t = $('toast'); t.textContent = msg; t.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded shadow text-white text-sm max-w-sm ${ok ? 'bg-green-600' : 'bg-red-600'}`;
+  setTimeout(() => t.classList.add('hidden'), 3500);
+}
+async function api(path, opts = {}) {
+  opts.headers = { ...(opts.headers || {}), Authorization: 'Bearer ' + token };
+  if (opts.json) { opts.body = JSON.stringify(opts.json); opts.headers['Content-Type'] = 'application/json'; opts.method = opts.method || 'POST'; }
+  const r = await fetch(API + path, opts);
+  if (r.status === 401 && path !== '/auth/login') logout();
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.statusText); }
+  return r;
+}
+const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message); } };
+
+function fill(e) { $('email').value = e; }
+const doLogin = guard(async () => {
+  const r = await (await fetch(API + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: $('email').value, password: $('password').value }) })).json().then(j => { if (!j.token) throw new Error(j.detail || 'Login failed'); return j; });
+  token = r.token; me = r.user; localStorage.setItem('token', token); localStorage.setItem('me', JSON.stringify(me)); start();
+});
+function logout() { localStorage.clear(); token = me = null; $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+
+const start = guard(async () => {
+  me = await (await api('/me')).json(); localStorage.setItem('me', JSON.stringify(me));
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  $('who').textContent = `${me.name} · ${me.role.replace('_', ' ')} · ${me.department}`;
+  $('newCase').classList.toggle('hidden', !can('manage'));
+  $('deptBoxes').innerHTML = DEPTS.map(d => `<label><input type="checkbox" value="${d}" ${d !== 'Audit' ? 'checked' : ''}> ${d}</label>`).join('');
+  $('caseView').innerHTML = 'Select a case to begin.'; $('panel').classList.add('hidden');
+  loadCases();
+});
+
+const loadCases = guard(async () => {
+  const cs = await (await api('/cases')).json();
+  $('cases').innerHTML = cs.map(c => `<div onclick="openCase(${c.id})" class="border rounded p-2 cursor-pointer hover:bg-indigo-50">
+    <div class="font-medium">${esc(c.case_number)}</div><div class="text-slate-500">${esc(c.title)}</div>
+    <div class="text-xs text-slate-400">${c.departments.map(esc).join(' · ')}</div></div>`).join('') || '<i class="text-slate-400">No cases visible to your department.</i>';
+});
+const createCase = guard(async () => {
+  const deps = [...document.querySelectorAll('#deptBoxes input:checked')].map(i => i.value);
+  await api('/cases', { json: { case_number: $('cn').value, title: $('ct').value, departments: deps } });
+  toast('Case created', true); loadCases();
+});
+
+const openCase = guard(async id => {
+  cur = id; const docs = await (await api(`/cases/${id}/documents`)).json();
+  const opts = (me.types ?? TYPES).map(t => `<option>${t}</option>`).join('');
+  $('caseView').className = 'bg-white rounded-lg shadow p-4';
+  $('caseView').innerHTML = `
+    <div class="flex flex-wrap gap-2 items-center mb-3">
+      <h2 class="font-semibold text-lg mr-auto">Case documents</h2>
+      <button onclick="showAudit()" class="px-3 py-1 bg-slate-100 rounded text-sm">🧾 Audit trail</button>
+      <button onclick="showSummary()" class="px-3 py-1 bg-slate-100 rounded text-sm">✨ AI summary</button>
+    </div>
+    ${can('upload') && opts ? `<div class="flex flex-wrap gap-2 mb-3 p-3 bg-slate-50 rounded text-sm">
+      <select id="dtype" class="border rounded px-2 py-1">${opts}</select>
+      <input id="dfile" type="file" class="text-xs flex-1">
+      <button onclick="upload()" class="bg-indigo-600 text-white px-3 rounded">Upload</button>
+      <span class="w-full text-xs text-slate-400">Uploading a file with an existing name creates a new version.</span></div>`
+      : `<p class="text-xs text-amber-600 mb-3">Your role has view-only access to this case (no upload).</p>`}
+    <div class="space-y-2">${docs.map(d => `
+      <div class="border rounded p-3">
+        <div class="flex flex-wrap justify-between gap-2">
+          <div><b>${esc(d.name)}</b> <span class="text-xs bg-indigo-100 text-indigo-700 rounded px-1">v${d.version}</span>
+            <div class="text-xs text-slate-500">${esc(d.doc_type)} · ${esc(d.department)} · ${esc(d.uploader)}</div></div>
+          <span id="v${d.id}" class="text-xs self-start px-2 py-0.5 rounded bg-slate-100">not verified</span>
+        </div>
+        <div class="text-xs font-mono text-slate-400 break-all my-1">SHA-256: ${d.sha256}</div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button onclick="download(${d.id})" class="underline">Download</button>
+          <button onclick="showVersions(${d.id})" class="underline">Versions (${d.versions})</button>
+          ${can('upload') ? `<button onclick="pickUpdate(${d.id})" class="underline text-indigo-600">Update file (new version)</button>` : ''}
+          ${can('verify') ? `<button onclick="verify(${d.id})" class="underline">Verify integrity</button>` : ''}
+          ${can('manage') ? `<button onclick="tamper(${d.id})" class="underline text-red-500">Simulate tamper (demo)</button>` : ''}
+        </div></div>`).join('') || '<i class="text-slate-400 text-sm">No documents yet.</i>'}</div>`;
+});
+
+const upload = guard(async () => {
+  const f = $('dfile').files[0]; if (!f) throw new Error('Choose a file first');
+  const fd = new FormData(); fd.append('doc_type', $('dtype').value); fd.append('file', f);
+  const r = await (await api(`/cases/${cur}/documents`, { method: 'POST', body: fd })).json();
+  toast(`Uploaded (v${r.version})`, true); openCase(cur);
+});
+function pickUpdate(id) {
+  const i = document.createElement('input'); i.type = 'file';
+  i.onchange = () => updateDoc(id, i.files[0]); i.click();
+}
+const updateDoc = guard(async (id, f) => {
+  if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await (await api(`/documents/${id}/versions`, { method: 'POST', body: fd })).json();
+  toast(`Updated - now v${r.version} (previous versions kept)`, true); openCase(cur);
+});
+const download = guard(async id => {
+  const r = await api(`/documents/${id}/download`); const name = /filename="?([^"]+)"?/.exec(r.headers.get('content-disposition') || '')?.[1] || 'document';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click();
+});
+const verify = guard(async id => {
+  const r = await (await api(`/documents/${id}/verify`, { method: 'POST' })).json(), ok = r.status === 'VALID', el = $('v' + id);
+  el.textContent = ok ? '✔ VALID' : '✖ INTEGRITY FAILURE'; el.className = `text-xs self-start px-2 py-0.5 rounded text-white ${ok ? 'bg-green-600' : 'bg-red-600'}`;
+  if (!ok) toast(`Hash mismatch! Now: ${r.current_hash.slice(0, 16)}…`);
+});
+const tamper = guard(async id => { await api(`/documents/${id}/tamper`, { method: 'POST' }); toast('Stored file altered — now run Verify', true); });
+
+function panel(html) { const p = $('panel'); p.classList.remove('hidden'); p.innerHTML = html; p.scrollIntoView({ behavior: 'smooth' }); }
+const showVersions = guard(async id => {
+  const vs = await (await api(`/documents/${id}/versions`)).json();
+  panel(`<h3 class="font-semibold mb-2">Version history — ${esc(vs[0].name)}</h3>` + vs.map(v => `<div class="border-b py-1">
+    <b>v${v.version}</b> · ${esc(v.uploader)} · ${v.created_at}
+    <button onclick="download(${v.id})" class="underline text-xs ml-2">Download</button>
+    <div class="text-xs font-mono text-slate-400 break-all">${v.sha256}</div></div>`).join(''));
+});
+const showAudit = guard(async () => {
+  const a = await (await api(`/cases/${cur}/audit`)).json();
+  panel(`<h3 class="font-semibold mb-1">Audit trail</h3>
+    <p class="text-xs mb-2 ${a.chain_valid ? 'text-green-600' : 'text-red-600'}">${a.chain_valid ? '✔ Hash chain intact' : '✖ Hash chain BROKEN — log was altered'}</p>` +
+    a.events.map(e => `<div class="border-l-2 border-indigo-300 pl-3 py-1"><b>${e.action}</b> — ${esc(e.user_name || 'system')}
+      <span class="text-xs text-slate-400">${e.ts}</span><div class="text-xs text-slate-500">${esc(e.detail)}</div>
+      <div class="text-[10px] font-mono text-slate-300">${e.hash.slice(0, 32)}…</div></div>`).join(''));
+});
+const showSummary = guard(async () => {
+  panel('Generating…');
+  const s = await (await api(`/cases/${cur}/summary`, { method: 'POST' })).json();
+  panel(`<div class="text-xs bg-amber-100 text-amber-800 rounded px-2 py-1 mb-2">🤖 ${esc(s.label)}</div>
+    <ul class="list-disc ml-5 space-y-1">${s.summary.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    <div class="text-xs text-slate-500 mt-2">Sources: ${s.sources.map(esc).join(', ') || '—'}</div>`);
+});
+const doSearch = guard(async () => {
+  const hits = await (await api('/search?q_=' + encodeURIComponent($('q').value))).json();
+  panel(`<h3 class="font-semibold mb-2">Search results (authorized documents only)</h3>` + (hits.map(h => `<div class="border-b py-2">
+    <b>${esc(h.name)}</b> <span class="text-xs text-slate-500">${esc(h.doc_type)} · ${esc(h.case_number)} · score ${h.score}</span>
+    <div class="text-xs text-slate-600 italic">${esc(h.snippet)}</div>
+    <button onclick="openCase(${h.case_id})" class="underline text-xs">Open case</button></div>`).join('') || '<i>No matches.</i>'));
+});
+
+if (token && me) start();
+</script>
+</body>
+</html>
