@@ -24,7 +24,7 @@ Demo users (password `demo123`): officer@police.gov, forensic@lab.gov, legal@leg
 8. Audit trail shows every action; the hash chain confirms the log is untampered.
 9. Search "suspicious transactions" and generate the case summary.
 
-## Admin: case settings & access (new)
+## Admin: case settings & access
 Login as Admin → open a case → **⚙ Admin settings**:
 - **Case settings** – edit title/description and set status `OPEN` / `CLOSED` / `ARCHIVED` (closed/archived = read-only, no uploads or new versions).
 - **Departments** – change which departments are assigned to the case.
